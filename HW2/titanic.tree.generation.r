@@ -3,7 +3,11 @@ library(rpart)
 library(lattice)
 
 titanic.total <- read.csv("dsd-workspace/HW2/titanic.train.feature.enhanced.csv")
+
+## Add missing levels
 levels(titanic.total$Title) <- append(levels(titanic.total$Title), "Dona.")
+levels(titanic.total$TicketPrefix) <- append(levels(titanic.total$TicketPrefix), c("A.", "AQ/3.", "AQ/4", "LP", "SC/A.3", "SC/A4", "STON/OQ."))
+
 titanic.holdout <- read.csv("dsd-workspace/HW2/titanic.test.feature.enhanced.csv")
 
 ## BUILD MODEL
@@ -51,8 +55,10 @@ tree.params <- rpart.control(minsplit=20, minbucket=7, maxdepth=5, cp=0.01)
 
 ## Fit decision model to training set
 ## Use parameters from above and Gini index for splitting
-titanic.tree <- rpart(Survived ~LastNameFreq+Sex+Age+Title+Embarked, data = titanic.train, 
+titanic.tree <- rpart(Survived~TicketPrefix+AgeBelow14+Pclass+Title+LastNameFreq+Sex+Embarked, data = titanic.train, 
                        control=tree.params, parms=list(split="gini"))
+titanic.rf.model <- randomForest(Survived~TicketPrefix+AgeBelow14+Pclass+Title+LastNameFreq+Sex+Embarked, data=titanic.train, ntree=250)
+varImpPlot(titanic.rf.model)
 
 
 ## MODEL EVALUATION
@@ -70,21 +76,20 @@ head(titanic.holdout.predictions)
 ## Extract the test data survival to build the confusion matrix
 titanic.test.confusion <- table(titanic.test.predictions, titanic.test$Survived)
 titanic.total.confusion <- table(titanic.total.predictions, titanic.total$Survived)
-# titanic.holdout.confusion <- table(titanic.holdout.predictions, titanic.holdout$Survived)
+titanic.holdout.confusion <- table(titanic.holdout.predictions, titanic.holdout$Survived)
 
 head(titanic.test.confusion)
 head(titanic.total.confusion)
-# head(titanic.holdout.confusion)
+head(titanic.holdout.confusion)
 
+## prepare results
+results <- data.frame(titanic.holdout.predictions)
+names(results)[1] <- "Survived"
 
-results <- cbind(titanic.holdout, titanic.holdout.predictions)[,c(3,17)]
-names(results)[2] = "Survived"
-# titanic.with.result <- cbind(titanic.total, data.frame(titanic.result))
-
-# head(titanic.with.result[,c(2,14)])
-
-# results <- titanic.with.result[,c(2,14)]
-
-## Restore integers
+## Restore integer levels
 levels(results$Survived) <- c(0,1)
-write.csv(results, file="dsd-workspace/HW2/titanic.test.results.HW2.csv", row.names = F, quote = F)
+
+## Attach PassengerId
+results <- cbind(titanic.holdout["PassengerId"], results)
+
+write.csv(results, file="dsd-workspace/HW3/titanic.test.results.HW3.csv", row.names = F, quote = F)

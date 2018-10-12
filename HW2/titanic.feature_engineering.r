@@ -92,7 +92,7 @@ titanic.feature.engineering <- function(dataframe) {
     result.dframe$TicketPrefix <- ticket.prefix.col(dataframe)
 
     ## Fix Survival
-    result.dframe$Survival <- fix.survived.col(result.dframe)
+    result.dframe$Survived <- fix.survived.col(result.dframe)
 
     ## Substitute NA aged with median
     result.dframe$Age[is.na(result.dframe$Age)] <- median(dataframe$Age, na.rm=TRUE)

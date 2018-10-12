@@ -2,13 +2,19 @@
 library(rpart)
 library(lattice)
 
-titanic.total <- read.csv("dsd-workspace/HW2/titanic.train.feature.enhanced.csv")
+titanic.total <- read.csv("dsd-workspace/HW3/titanic.train.feature.enhanced.csv")
+# titanic.total$IsClergy <- as.factor(titanic.total$IsClergy)
+# titanic.total$IsDoctor <- as.factor(titanic.total$IsDoctor)
 
 ## Add missing levels
-levels(titanic.total$Title) <- append(levels(titanic.total$Title), "Dona.")
-levels(titanic.total$TicketPrefix) <- append(levels(titanic.total$TicketPrefix), c("A.", "AQ/3.", "AQ/4", "LP", "SC/A.3", "SC/A4", "STON/OQ."))
+# levels(titanic.total$Title) <- append(levels(titanic.total$Title), "Dona.")
+# levels(titanic.total$TicketPrefix) <- append(levels(titanic.total$TicketPrefix), c("A.", "AQ/3.", "AQ/4", "LP", "SC/A.3", "SC/A4", "STON/OQ."))
 
-titanic.holdout <- read.csv("dsd-workspace/HW2/titanic.test.feature.enhanced.csv")
+titanic.holdout <- read.csv("dsd-workspace/HW3/titanic.test.feature.enhanced.csv")
+# titanic.holdout$IsClergy <- as.factor(titanic.holdout$IsClergy)
+# titanic.holdout$IsDoctor <- as.factor(titanic.holdout$IsDoctor)
+
+titanic.bootcamp.eng <- read.csv("dsd-workspace/HW3/titanic.bootcamp.feature.enhanced.csv")
 
 ## BUILD MODEL
 ## randomly choose 70% of the data set as training data
@@ -55,17 +61,17 @@ tree.params <- rpart.control(minsplit=20, minbucket=7, maxdepth=5, cp=0.01)
 
 ## Fit decision model to training set
 ## Use parameters from above and Gini index for splitting
-titanic.tree <- rpart(Survived~TicketPrefix+AgeBelow14+Pclass+Title+LastNameFreq+Sex+Embarked, data = titanic.train, 
+titanic.tree <- rpart(Survived~TicketPrefix+AgeBelow14+IsDoctor+IsClergy+Pclass+Title+LastNameFreq+Sex+Embarked, data = titanic.train, 
                        control=tree.params, parms=list(split="gini"))
-titanic.rf.model <- randomForest(Survived~TicketPrefix+AgeBelow14+Pclass+Title+LastNameFreq+Sex+Embarked, data=titanic.train, ntree=250)
+titanic.rf.model <- randomForest(Survived~TicketPrefix+AgeBelow14+IsDoctor+IsClergy+Pclass+Title+LastNameFreq+Sex+Embarked, data=titanic.train, ntree=250, maxnodes=10)
 varImpPlot(titanic.rf.model)
 
 
 ## MODEL EVALUATION
 ## make prediction using decision model
-titanic.test.predictions <- predict(titanic.tree, titanic.test, type="class")
-titanic.total.predictions <- predict(titanic.tree, titanic.total, type="class")
-titanic.holdout.predictions <- predict(titanic.tree, titanic.holdout, type="class")
+titanic.test.predictions <- predict(titanic.rf.model, titanic.test, type="class")
+titanic.total.predictions <- predict(titanic.rf.model, titanic.total, type="class")
+titanic.holdout.predictions <- predict(titanic.rf.model, titanic.holdout, type="class")
 
 
 head(titanic.test.predictions)
@@ -92,4 +98,4 @@ levels(results$Survived) <- c(0,1)
 ## Attach PassengerId
 results <- cbind(titanic.holdout["PassengerId"], results)
 
-write.csv(results, file="dsd-workspace/HW3/titanic.test.results.HW3.csv", row.names = F, quote = F)
+write.csv(results, file="dsd-workspace/HW3/titanic.test.results.rf.HW3.csv", row.names = F, quote = F)

@@ -1,25 +1,21 @@
 ## load the library
 library(rpart)
 library(lattice)
-
-
-titanic.bootcamp <- read.csv("bootcamp/Datasets/titanic.csv")
-titanic.hw.train <- read.csv("dsd-workspace/Datasets/Titanic/train.csv")
-titanic.hw.test <- read.csv("dsd-workspace/Datasets/Titanic/test.csv")
+library(plyr)
 
 ## Feature Engineering
 
-ticket.prefix <- function(dataframe){
-    dataframe$Ticket <- as.character(dataframe$Ticket)
+ticket.prefix.col <- function(dataframe){
+    ticket.column <- as.character(dataframe$Ticket)
     
     # Split Tickets column
-    ticket.splits <- strsplit(as.character(dataframe$Ticket), " ")
+    ticket.splits <- strsplit(ticket.column, " ")
 
     # Get prefix as first split
     ticket.prefixes <- data.frame(cbind(sapply(ticket.splits, `[`, 1)))
 
     # Make a new data frame of prefixes and original ticket names
-    ticket.dframe <- cbind(ticket.prefixes,(dataframe$Ticket))
+    ticket.dframe <- cbind(ticket.prefixes, ticket.column)
     names(ticket.dframe) <- c("TicketPrefix", "Ticket")
 
     # Assign class for simple vs prefixed ticket
@@ -32,35 +28,71 @@ ticket.prefix <- function(dataframe){
 
     # Set "plain" tickets
     ticket.dframe[ticket.dframe$TicketSimple, ]$TicketPrefix <- "plain"
-    ticket.dframe$Ticket <- as.factor(ticket.dframe$Ticket)
-    ticket.dframe
+    ticket.dframe$TicketPrefix <- as.factor(ticket.dframe$TicketPrefix)
+    ticket.dframe[,"TicketPrefix"]
 }
 
-add.level.survial <- function (dataframe) {
+fix.survived.col <- function (dataframe) {
+    outframe <- dataframe
+
+    if(is.null(outframe$Survived)) {
+        # make a dummy column (everbody died)
+        outframe$Survived <- integer(nrow(dataframe))
+    }
+    outframe$Survived[is.na(outframe$Survived)] <- 0
+    outframe$Survived <- as.factor(outframe$Survived)
+    # levels(outframe$Survived) <- c("Died", "Survived")
+    levels(outframe$Survived) <- c(0, 1)
+    outframe[,"Survived"]
+}
+
+lname.freq.title.cols <- function(dataframe) {
     result.dframe <- dataframe
 
-    if(!is.null(dataframe$Survived)) {
-        result.dframe$Survived <- as.factor(dataframe$Survived)
-    } else {
-        # make a dummy column (everbody died)
-        result.dframe$Survived <- integer(nrow(dataframe))
-    }
-    levels(result.dframe$Survived) <- c("Died", "Survived")
-    result.dframe
-}
+    # Split Name by ","
+    lname.remainder <- strsplit(as.character(result.dframe$Name), ",")
 
-set.titles <- function(dataframe) {
+    # Turn into data frame
+    lname.remainder <- data.frame(Reduce(rbind, lname.remainder))
 
+    # Relabel
+    names(lname.remainder) <- c("LastName", "RemainderName")
+
+    # # Add names
+    # result.dframe <- cbind(result.dframe, lname.remainder)
+
+    # Process Last Name Frequency
+    last.name.freq <- data.frame(table(lname.remainder$LastName))
+
+    names(last.name.freq) <- c("LastName", "LastNameFreq")
+
+    # Join last name frequency back with names
+    names.dframe <- join(lname.remainder, last.name.freq, by="LastName", type="left" )
+
+    #Plot
+    # densityplot(result.dframe$Freq, groups=result.dframe$Survived)
+
+
+    split.rNames <- strsplit(trimws(as.character(names.dframe$RemainderName)), " ")
+
+    # cabin.dframe <- data.frame(Reduce(rbind, strsplit(dataframe$Cabin, " ")))
+
+    name.title <- data.frame(cbind(sapply(split.rNames, `[`, 1)))
+    names(name.title) <- c("Title")
+
+    names.dframe <- cbind(names.dframe, name.title)
+
+    names.dframe
 }
 
 titanic.feature.engineering <- function(dataframe) {
     result.dframe <- dataframe
 
-    ## Alter Tickets to type
-    result.dframe$TicketPrefix <- as.factor(ticket.prefix(dataframe)$TicketPrefix)
+    ## Add Ticket Types
+    result.dframe$TicketPrefix <- ticket.prefix.col(dataframe)
 
     ## Fix Survival
-    result.dframe <- add.level.survial(result.dframe)
+    result.dframe$Survival <- fix.survived.col(result.dframe)
 
     ## Substitute NA aged with median
     result.dframe$Age[is.na(result.dframe$Age)] <- median(dataframe$Age, na.rm=TRUE)
@@ -70,49 +102,40 @@ titanic.feature.engineering <- function(dataframe) {
     # Age Tended to Die
     result.dframe$AgeBetween25To32 <- result.dframe$Age > 25 && result.dframe$Age < 32
 
-    # Split Name by ","
-    lname.remainder <- strsplit(as.character(result.dframe$Name), ",")
+    ## LastName LastNameFreq Title Cols
+    result.dframe <- cbind(result.dframe, lname.freq.title.cols(result.dframe))
 
-    # Turn into data frame
-    lname.remainder.dframe <- data.frame(Reduce(rbind, lname.remainder))
+    ## Doctors
+    IsDoctor <- result.dframe$Title == "Dr."
+    IsDoctor <- data.frame(IsDoctor)
+    result.dframe <- cbind(result.dframe, IsDoctor)
 
-    # Relabel
-    names(lname.remainder.dframe) <- c("LastName", "RemainderName")
-
-    # Add names
-    dataframe.named <- cbind(result.dframe, lname.remainder.dframe)
-
-    # Process Last Name Frequency
-    last.name.freq <- data.frame(table(dataframe.named$LastName))
-
-    names(last.name.freq) <- c("lname", "LastNameFreq")
-
-    # Merge name frequency back onto titanic
-    dataframe.named.freq <- merge(dataframe.named, last.name.freq, by.x="LastName", by.y="lname" )
-
-    #Plot
-    # densityplot(dataframe.named.freq$Freq, groups=dataframe.named.freq$Survived)
-
-
-    split.names <- strsplit(trimws(as.character(dataframe.named.freq$RemainderName)), " ")
-
-    # cabin.dframe <- data.frame(Reduce(rbind, strsplit(dataframe$Cabin, " ")))
-
-    name.title <- data.frame(cbind(sapply(split.names, `[`, 1)))
-    names(name.title) <- c("Title")
-
-    dataframe.named.freq.title <- cbind(dataframe.named.freq, name.title)
+    ## Clergy
+    IsClergy <- result.dframe$Title == "Rev."
+    IsClergy <- data.frame(IsClergy)
+    result.dframe <- cbind(result.dframe, IsClergy)
     
-    remove.columns <- c("RemainderName", "LastName", "Name", "Age")
-    result.dframe <- dataframe.named.freq.title[ , -which(names(dataframe.named.freq.title) %in% remove.columns)]
+    # remove.columns <- c("RemainderName", "LastName", "Name", "Age", "Ticket")
+    # result.dframe <- result.dframe[ , -which(names(result.dframe) %in% remove.columns)]
 
     result.dframe
 }
 
-titanic.bootcamp.eng <- titanic.feature.engineering(titanic.bootcamp)
-titanic.hw.train.eng <- titanic.feature.engineering(titanic.hw.train)
-titanic.hw.test.eng <- titanic.feature.engineering(titanic.hw.test)
 
-write.csv(titanic.bootcamp.eng, "dsd-workspace/HW2/titanic.bootcamp.feature.enhanced.csv", row.names=F)
-write.csv(titanic.hw.train.eng, "dsd-workspace/HW2/titanic.train.feature.enhanced.csv", row.names=F)
-write.csv(titanic.hw.test.eng,  "dsd-workspace/HW2/titanic.test.feature.enhanced.csv", row.names=F)
+titanic.hw.train <- read.csv("dsd-workspace/Datasets/Titanic/train.csv")
+titanic.hw.test <- read.csv("dsd-workspace/Datasets/Titanic/test.csv")
+# titanic.hw.test <- fix.survived.col(titanic.hw.test)
+# titanic.hw.test$Survived <- integer(nrow(titanic.hw.test))
+
+titanic.hw.train.len <- nrow(titanic.hw.train)
+titanic.hw.test.len <- nrow(titanic.hw.test)
+
+collossus <- rbind(titanic.hw.train, titanic.hw.test)
+
+collossus.eng <- titanic.feature.engineering(collossus)
+
+titanic.hw.train.eng <- head(collossus.eng, n=titanic.hw.train.len)
+titanic.hw.test.eng <- tail(collossus.eng, n=titanic.hw.test.len)
+
+write.csv(titanic.hw.train.eng, "dsd-workspace/HW3/titanic.train.feature.enhanced.csv", row.names=F)
+write.csv(titanic.hw.test.eng,  "dsd-workspace/HW3/titanic.test.feature.enhanced.csv", row.names=F)
